@@ -1,0 +1,306 @@
+---
+title: "ps5-rmarkdown"
+output: html_document
+date: "2023-02-14"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+# 1. Load and Check Data
+
+### 1. Importing data
+```{r}
+library(tidyverse)
+setwd("/Users/michaelibrahim/Documents/info201/PS/ps5-rmarkdown")
+gd <- read_delim("data/gapminder.csv")
+knitr::opts_chunk$set
+```
+
+### 2. Load data
+```{r }
+dim(gd)
+```
+
+### 3. Small sample
+```{r}
+sample_n(gd, 5)
+# it seems to be OK
+```
+
+# 2. Descriptive statistics
+
+### 1. Number of countries
+```{r}
+n_distinct(gd$iso3) # unique iso3 codes
+n_distinct(gd$iso2) # unique iso2 codes
+n_distinct(gd$name) # unique country names
+```
+
+### 2a. Names for each iso-2 code
+```{r}
+gd %>%
+  group_by(iso2) %>%
+  summarise(n = n_distinct(name))
+
+gd %>%
+  group_by(name) %>%
+  filter(n_distinct(iso2) > 1) %>%
+  select(iso2, name) %>%
+  distinct()
+```
+
+### 2b. Names for each name, iso-3 code
+```{r}
+gd %>%
+  group_by(name) %>%
+  summarise(n = n_distinct(name))
+
+gd %>%
+  group_by(iso3) %>%
+  summarise(n = n_distinct(name))
+
+
+gd %>%
+  group_by(name) %>%
+  filter(n_distinct(iso3) > 1) %>%
+  select(name, iso3) %>%
+  distinct()
+```
+
+### 3. Min and max
+```{r}
+min(gd$time, na.rm = TRUE)
+max(gd$time, na.rm = TRUE)
+```
+
+# 3. CO2 emissions
+
+### 1.
+```{r}
+gd %>%
+  group_by(time) %>%
+  summarise(missing_co2 = sum(is.na(co2)), missing_co2_PC = sum(is.na(co2_PC))) %>%
+  arrange(desc(missing_co2 + missing_co2_PC))
+```
+
+### 2.
+```{r}
+countries <- c("United States of America", "China", "India", "Pakistan", "Brazil")
+co2_subset <- subset(gd, name %in% countries)
+
+ggplot(data = co2_subset, aes(x = time, y = co2, color = name)) +
+  geom_line() +
+  labs(x = "Year", y = "CO2 Emissions", color = "Country") +
+  scale_x_continuous(limits = c(1950, 2020), breaks = seq(1950, 2020, 10))
+
+# China has the highest CO2 emissions
+
+```
+
+### 3.
+```{r}
+countries <- c("United States of America", "China", "India", "Canada", "Pakistan")
+co2_pc_df <- subset(gd, name %in% countries)
+
+ggplot(co2_pc_df, aes(x = time, y = co2_PC, group = name, color = name)) +
+  geom_line() +
+  labs(x = "Year", y = "CO2 Emissions per Capita (metric tons)") +
+  scale_color_discrete(name = "Country")
+
+# This plot shows that the US actually has the highest emissions per capita
+```
+
+### 4.
+```{r}
+co2_pc_avg <- aggregate(gd$co2_PC, by=list(gd$region), FUN=mean, na.rm=TRUE)
+names(co2_pc_avg) <- c("region", "co2_pc_avg")
+co2_pc_avg
+
+# Africa pollutes the least by a large amount
+```
+
+### 5.
+```{r}
+gd_1960 <- subset(gd, time == 1960)
+gd_2016 <- subset(gd, time == 2016)
+
+avg_co2_1960 <- tapply(gd_1960$co2_PC, gd_1960$region, mean, na.rm = TRUE)
+avg_co2_2016 <- tapply(gd_2016$co2_PC, gd_2016$region, mean, na.rm = TRUE)
+
+avg_co2 <- data.frame(continent = c("Africa", "Americas", "Asia", "Europe", "Oceania"),
+                      year_1960 = avg_co2_1960,
+                      year_2016 = avg_co2_2016)
+
+avg_co2_long <- tidyr::gather(avg_co2, year, value, -continent)
+
+ggplot(avg_co2_long, aes(x = continent, y = value, fill = year)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Average CO2 Emissions per Capita across Continents",
+       x = "Continents", y = "Average CO2 Emissions per Capita") 
+```
+
+### 6.
+```{r}
+
+# Using 2016 data from here on out, 2019 is too little
+gd_2016 <- subset(gd, time == 2016)
+gd_2016_grouped <- gd_2016 %>%
+  group_by(region, name) %>%
+  summarize(mean_co2_pc = mean(co2_PC, na.rm = TRUE))
+top3_co2_pc_2016 <- gd_2016_grouped %>%
+  group_by(region) %>%
+  slice_max(order_by = mean_co2_pc, n = 3) %>%
+  ungroup()
+
+bottom3_co2_pc_2016 <- gd_2016_grouped %>%
+  group_by(region) %>%
+  slice_min(order_by = mean_co2_pc, n = 3) %>%
+  ungroup()
+
+
+print(top3_co2_pc_2016)
+print(bottom3_co2_pc_2016)
+
+```
+
+
+# 4. GDP per capita
+
+### 1. 
+```{r}
+
+gd_1960 <- subset(gd, time == 1960, na.rm=TRUE)
+
+
+ggplot(gd_1960, aes(x = GDP_PC, y = lifeExpectancy, color = region)) +
+  geom_point(alpha = 0.7) +
+  labs(title = "GDP per Capita versus Life Expectancy by Country (1960)",
+       x = "GDP per Capita", y = "Life Expectancy")
+
+```
+
+### 2.
+```{r}
+gd_2016 <- subset(gd, time == 2016, na.rm=TRUE)
+
+
+ggplot(gd_2016, aes(x = GDP_PC, y = lifeExpectancy, color = region)) +
+  geom_point(alpha = 0.7) +
+  labs(title = "GDP per Capita versus Life Expectancy by Country (2016)",
+       x = "GDP per Capita", y = "Life Expectancy")
+```
+
+### 3.
+```{r}
+library(gridExtra)
+p1 <- ggplot(gd_1960, aes(x = GDP_PC, y = lifeExpectancy, color = region)) +
+  geom_point(alpha = 0.7) +
+  labs(title = "GDP per Capita versus Life Expectancy by Country (1960)",
+       x = "GDP per Capita", y = "Life Expectancy")
+p2 <- ggplot(gd_2016, aes(x = GDP_PC, y = lifeExpectancy, color = region)) +
+  geom_point(alpha = 0.7) +
+  labs(title = "GDP per Capita versus Life Expectancy by Country (2016)",
+       x = "GDP per Capita", y = "Life Expectancy")
+
+grid.arrange(p1, p2, ncol=2)
+
+# In 1960, there was a much wider range of life expectancies and GDP per capita values, with many countries having very low values for both. In contrast, by 2016, most countries had significantly higher life expectancies and GDP per capita values, with a narrower range of values.
+```
+
+### 4.
+```{r}
+gd_1960 <- subset(gd, time == 1960, na.rm = TRUE)
+gd_2016 <- subset(gd, time == 2016, na.rm = TRUE)
+
+avg_le_1960 <- tapply(gd_1960$lifeExpectancy, gd_1960$region, mean, na.rm = TRUE)
+avg_le_2016 <- tapply(gd_2016$lifeExpectancy, gd_2016$region, mean, na.rm = TRUE)
+
+avg_le_1960
+avg_le_2016
+
+# Yes the results fit what I saw on the figures
+```
+
+### 5.
+```{r}
+gd_filtered <- gd %>% filter(time %in% c(1960, 2016))
+
+gd_grouped <- gd_filtered %>%
+  group_by(region, time) %>%
+  summarise(avg_le = mean(lifeExpectancy, na.rm = TRUE))
+
+gd_lagged <- gd_grouped %>%
+  group_by(region) %>%
+  mutate(lag_le = lag(avg_le))
+
+gd_growth <- gd_lagged %>%
+  filter(time == 2016) %>%
+  mutate(growth_rate = ((avg_le - lag_le) / lag_le) * 100) %>%
+  select(region, growth_rate) %>%
+  arrange(growth_rate)
+
+gd_growth
+
+```
+
+### 6.
+```{r}
+# Create the histograms
+ggplot() +
+  geom_histogram(data = gd_1960, aes(x = GDP_PC), fill = "blue", alpha = 0.5) +
+  geom_histogram(data = gd_2016, aes(x = GDP_PC), fill = "green", alpha = 0.5) +
+  labs(x = "GDP per capita", y = "Frequency") +
+  scale_x_log10() +
+  ggtitle("Histogram of GDP per capita for 1960 and 2016")
+
+
+```
+
+### 7.
+
+```{r}
+
+# Rank of US in 1960
+gd %>% 
+  filter(name != "" & time == 1960 )%>% 
+  arrange(desc(lifeExpectancy)) %>% 
+  mutate(rank = rank(desc(lifeExpectancy))) %>% 
+  filter(name == "United States of America") %>% 
+  summarise(name, time, rank)
+
+# Rank of US in 2016
+gd %>% 
+  filter(name != "" & time == 2016) %>% 
+  arrange(desc(lifeExpectancy)) %>% 
+  mutate(rank = rank(desc(lifeExpectancy))) %>% 
+  filter(name == "United States of America") %>% 
+  summarise(name, time, rank)
+```
+
+### 8.
+```{r}
+
+ranking <- gd %>%
+  filter(!is.na(lifeExpectancy)) %>% 
+  arrange(desc(lifeExpectancy)) %>% 
+  group_by(time) %>% 
+  mutate(rank = rank(-lifeExpectancy))
+
+num_countries <- gd %>%
+  filter(!is.na(lifeExpectancy)) %>% 
+  group_by(time) %>% 
+  summarize(num_countries = n())
+
+rel_ranking <- ranking %>% 
+  left_join(num_countries, by = "time") %>% 
+  mutate(rel_rank = rank / num_countries) %>% 
+  filter((name == "United States of America") & (time == 1960 |time == 2016)) %>% 
+  select(time, rel_rank, num_countries)
+
+rel_ranking
+
+
+```
+
+
